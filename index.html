@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Sensor Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f7fa;
+      color: #1f2937;
+    }
+
+    .dashboard {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+      padding: 20px;
+    }
+
+    .dashboard-header {
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .status {
+      font-size: 14px;
+      color: #4b5563;
+    }
+
+    .status.error {
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <main class="dashboard">
+    <div class="dashboard-header">
+      <h1>Sensor Data Dashboard</h1>
+      <p id="status" class="status">Waiting for sensor data...</p>
+    </div>
+    <canvas id="sensorChart" aria-label="Sensor data chart" role="img"></canvas>
+  </main>
+
+  <script>
+    const API_URL = '/api/sensor-data';
+    const REFRESH_INTERVAL_MS = 5000;
+    const MAX_POINTS = 20;
+
+    const statusEl = document.getElementById('status');
+    const chart = new Chart(document.getElementById('sensorChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Temperature (°C)',
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37, 99, 235, 0.2)',
+            data: [],
+            tension: 0.3,
+            fill: true
+          },
+          {
+            label: 'Humidity (%)',
+            borderColor: '#16a34a',
+            backgroundColor: 'rgba(22, 163, 74, 0.2)',
+            data: [],
+            tension: 0.3,
+            fill: true
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Time'
+            }
+          },
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+
+    function updateStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle('error', isError);
+    }
+
+    function addDataPoint(point) {
+      const timestamp = point.timestamp || new Date().toISOString();
+      const label = new Date(timestamp).toLocaleTimeString();
+
+      chart.data.labels.push(label);
+      chart.data.datasets[0].data.push(Number(point.temperature));
+      chart.data.datasets[1].data.push(Number(point.humidity));
+
+      if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach((dataset) => dataset.data.shift());
+      }
+
+      chart.update();
+    }
+
+    async function fetchSensorData() {
+      try {
+        const response = await fetch(API_URL, { cache: 'no-store' });
+
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const latest = Array.isArray(payload) ? payload[payload.length - 1] : payload;
+
+        if (!latest || latest.temperature === undefined || latest.humidity === undefined) {
+          throw new Error('Invalid payload structure');
+        }
+
+        addDataPoint(latest);
+        updateStatus(`Last updated at ${new Date().toLocaleTimeString()}`);
+      } catch (error) {
+        updateStatus(`Failed to load sensor data: ${error.message}`, true);
+      }
+    }
+
+    fetchSensorData();
+    setInterval(fetchSensorData, REFRESH_INTERVAL_MS);
+  </script>
+</body>
+</html>
